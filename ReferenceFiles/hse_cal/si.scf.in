@@ -1,0 +1,41 @@
+&CONTROL
+  calculation = 'scf',
+  prefix      = 'si',
+  pseudo_dir  = '/scratch/mate250-fa26/pseudos/',
+  outdir      = './Si_out/',
+/
+
+&SYSTEM
+  ibrav       = 0,
+  nat         = 2,
+  ntyp        = 1,
+
+  ecutwfc     = 40.0,
+  ecutrho     = 320.0,
+
+  nbnd        = 8,
+
+  input_dft   = 'HSE',
+  nqx1        = 2,
+  nqx2        = 2,
+  nqx3        = 2,
+/
+
+&ELECTRONS
+  conv_thr    = 1.0d-8,
+/
+
+ATOMIC_SPECIES
+  Si  28.086  Si.pbe-n-kjpaw_psl.1.0.0.UPF
+
+CELL_PARAMETERS {angstrom}
+  0.000000000   2.734766598   2.734766598
+  2.734766598   0.000000000   2.734766598
+  2.734766598   2.734766598   0.000000000
+
+ATOMIC_POSITIONS {crystal}
+  Si  0.000000000   0.000000000   0.000000000
+  Si  0.250000000   0.250000000   0.250000000
+
+K_POINTS automatic
+  10 10 10  0 0 0
