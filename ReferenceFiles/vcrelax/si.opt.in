@@ -34,7 +34,7 @@
 /
 
 ATOMIC_SPECIES
-  Si  28.086  Si.pbe-n-kjpaw_psl.1.0.0.UPF
+  Si  28.086  Si_ONCV_PBE-1.2.upf
 
 CELL_PARAMETERS {angstrom}
   0.000000000   2.721851186   2.721851186

@@ -1,8 +1,8 @@
 &CONTROL
   calculation = 'scf',
   prefix      = 'si',
-  pseudo_dir  = '/scratch/mate250-fa26/pseudos/',
-  outdir      = './Si_out/',
+  pseudo_dir  = '/scratch/mate250-fa26/pseudos/', !modify me to have proper pesudo dir
+  outdir      = './Si_out/', !modify me to have proper  out dir
 /
 
 &SYSTEM
@@ -10,23 +10,23 @@
   nat         = 2,
   ntyp        = 1,
 
-  ecutwfc     = 40.0,
-  ecutrho     = 320.0,
+  ecutwfc     = 40.0, !tweak and optimize me
+  ecutrho     = 320.0,!should be 4 times ecutwfc
 
-  nbnd        = 8,
+  nbnd        = 8, !relates to the number of valence electrons.
 
-  input_dft   = 'HSE',
-  nqx1        = 2,
-  nqx2        = 2,
-  nqx3        = 2,
+  input_dft   = 'HSE', ! going to be computationally tweeked
+  nqx1        = 3,
+  nqx2        = 3,
+  nqx3        = 3,
 /
 
 &ELECTRONS
-  conv_thr    = 1.0d-8,
+  conv_thr    = 1.0d-10, !Advice from claude, needs source/justification
 /
 
 ATOMIC_SPECIES
-  Si  28.086  Si.pbe-n-kjpaw_psl.1.0.0.UPF
+  Si  28.086  Si_ONCV_PBE-1.2.upf
 
 CELL_PARAMETERS {angstrom}
   0.000000000   2.734766598   2.734766598
