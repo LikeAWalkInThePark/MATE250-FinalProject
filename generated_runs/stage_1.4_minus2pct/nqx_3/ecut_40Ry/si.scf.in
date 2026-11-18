@@ -1,0 +1,42 @@
+&CONTROL
+  calculation = 'scf',
+  prefix      = 'si',
+  pseudo_dir  = '../../../../ReferenceFiles/',!modify me to have proper pesudo dir
+  outdir      = './Si_out/', !modify me to have proper  out dir
+/
+
+&SYSTEM
+  ibrav       = 0,
+  nat         = 2,
+  ntyp        = 1,
+
+  ecutwfc     = 40,!tweak and optimize me
+  ecutrho     = 160,!should be 4 times ecutwfc
+
+  nbnd        = 8, !relates to the number of valence electrons.
+
+  input_dft   = 'HSE', ! going to be computationally tweeked
+  nqx1        = 3,
+  nqx2        = 3,
+  nqx3        = 3,
+/
+
+&ELECTRONS
+  conv_thr    = 1.0d-10, !Advice from claude, needs source/justification
+/
+
+ATOMIC_SPECIES
+  Si  28.086  Si_ONCV_PBE-1.2.upf
+
+CELL_PARAMETERS {angstrom}
+  0.000000000   2.680071266   2.680071266
+  2.680071266   0.000000000   2.680071266
+  2.680071266   2.680071266   0.000000000
+
+
+ATOMIC_POSITIONS {crystal}
+  Si  0.000000000   0.000000000   0.000000000
+  Si  0.250000000   0.250000000   0.250000000
+
+K_POINTS automatic
+  10 10 10  0 0 0
