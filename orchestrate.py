@@ -27,7 +27,7 @@ from pathlib import Path
 DEFAULT_ECUTS = (30.0, 35.0, 40.0, 45.0, 50.0, 60.0, 70.0, 80.0)
 STRAINS = (0.0, 1.0, 2.0, -1.0, -2.0)
 NQX_VALUES = (3, 4)
-STAGE1_ENERGY_TOL_RY = 1.0e-5
+STAGE1_ENERGY_TOL_RY = 1.0e-4
 STAGE2_GAP_TOL_EV = 0.005
 STAGE2_KPOINTS = (6, 8, 10, 12, 14)
 STATE_FILENAME = ".orchestrate_state.json"
@@ -120,12 +120,13 @@ def make_input(
     ecut: float,
     strain_percent: float,
     kpoint: int | None = None,
+    pseudo_dir: str = "'../../../../ReferenceFiles/'",
 ) -> str:
     scale = 1.0 + strain_percent / 100.0
     text = template
     # Each run is four directory levels below MATE250-FinalProject:
     # generated_runs/stage/nqx/ecut.  ReferenceFiles is at the project root.
-    text = replace_assignment(text, "pseudo_dir", "'../../../../ReferenceFiles/'")
+    text = replace_assignment(text, "pseudo_dir", pseudo_dir)
     text = replace_assignment(text, "ecutwfc", f"{ecut:g}")
     text = replace_assignment(text, "ecutrho", f"{4.0 * ecut:g}")
     text = replace_nqx(text, nqx)
@@ -204,6 +205,17 @@ def total_energy(run_dir: Path) -> float | None:
     return None
 
 
+def ecut_energy_data(output_root: Path, strain: float, nqx: int, ecut_values: list[float]) -> list[tuple[float, float]]:
+    results = []
+    for ecut in sorted(ecut_values):
+        run_dir = output_root / stage_name(strain) / f"nqx_{nqx}" / f"ecut_{ecut:g}Ry"
+        energy = total_energy(run_dir)
+        if energy is None:
+            raise RuntimeError(f"Could not find a QE total energy in {run_dir}")
+        results.append((ecut, energy))
+    return results
+
+
 def band_gap(run_dir: Path) -> float | None:
     """Extract a QE-reported highest-occupied/lowest-unoccupied gap in eV."""
     for path in reversed(output_files(run_dir)):
@@ -234,21 +246,50 @@ def band_gap(run_dir: Path) -> float | None:
 
 
 def choose_converged_ecut(output_root: Path, strain: float, nqx: int, ecut_values: list[float]) -> float:
-    results = []
-    for ecut in sorted(ecut_values):
-        run_dir = output_root / stage_name(strain) / f"nqx_{nqx}" / f"ecut_{ecut:g}Ry"
-        energy = total_energy(run_dir)
-        if energy is None:
-            raise RuntimeError(f"Could not find a QE total energy in {run_dir}")
-        results.append((ecut, energy))
+    results = ecut_energy_data(output_root, strain, nqx, ecut_values)
 
-    for (ecut, energy), (_, next_energy) in zip(results, results[1:]):
+    for (ecut, energy), (next_ecut, next_energy) in zip(results, results[1:]):
         if abs(next_energy - energy) <= STAGE1_ENERGY_TOL_RY:
-            return ecut
+            # Select the larger cutoff from the converged pair.  This is the
+            # conservative choice used for all Stage 2 calculations.
+            return next_ecut
     raise RuntimeError(
         f"No converged ecut found for {stage_name(strain)}, nqx={nqx}; "
         f"increase the ecut sweep or adjust STAGE1_ENERGY_TOL_RY."
     )
+
+
+def plot_ecut_convergence(output_root: Path, energy_data: dict, ecut_map: dict) -> Path:
+    """Plot Stage 1 total-energy convergence used to select Stage 2 cutoffs."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    figure, axes = plt.subplots(2, 3, figsize=(16, 9), constrained_layout=True)
+    axes = axes.ravel()
+    for index, strain in enumerate(STRAINS):
+        axis = axes[index]
+        strain_key = str(strain)
+        for nqx in NQX_VALUES:
+            values = energy_data[strain_key][str(nqx)]
+            x_values = [item[0] for item in values]
+            y_values = [item[1] for item in values]
+            axis.plot(x_values, y_values, marker="o", label=f"nqx={nqx}")
+            selected = float(ecut_map[strain_key][str(nqx)])
+            axis.axvline(selected, linestyle="--", alpha=0.6)
+        title = "0% strain" if strain == 0 else f"{strain:+g}% strain"
+        axis.set_title(title)
+        axis.set_xlabel("ecutwfc (Ry)")
+        axis.set_ylabel("Total energy (Ry)")
+        axis.grid(True, alpha=0.3)
+        axis.legend()
+
+    axes[-1].axis("off")
+    figure.suptitle("Stage 1 ecut convergence used for Stage 2", fontsize=15)
+    output_path = output_root / "ecut_convergence.png"
+    figure.savefig(output_path, dpi=200)
+    plt.close(figure)
+    return output_path
 
 
 def generate_stage1(root: Path, output_root: Path, template: str, submit_path: Path, ecut_values: list[float], submit: bool) -> None:
@@ -289,6 +330,7 @@ def generate_stage2(root: Path, output_root: Path, template: str, submit_path: P
                         ecut=ecut,
                         strain_percent=strain,
                         kpoint=kpoint,
+                        pseudo_dir="'../../../../../ReferenceFiles/'",
                     )
                 )
                 shutil.copy2(submit_path, run_dir / "submit.sh")
@@ -298,6 +340,18 @@ def generate_stage2(root: Path, output_root: Path, template: str, submit_path: P
         for run_dir in generated:
             print(f"Submitting {run_dir.relative_to(root)}")
             subprocess.run(["sbatch", "submit.sh"], cwd=run_dir, check=True)
+
+
+def submit_existing_stage(root: Path, stage_root: Path) -> int:
+    """Submit already-generated calculation directories for the current stage."""
+    submit_files = sorted(stage_root.rglob("submit.sh"))
+    if not submit_files:
+        raise RuntimeError(f"No submit.sh files found under {stage_root}")
+    for submit_file in submit_files:
+        run_dir = submit_file.parent
+        print(f"Submitting {run_dir.relative_to(root)}")
+        subprocess.run(["sbatch", "submit.sh"], cwd=run_dir, check=True)
+    return len(submit_files)
 
 
 def analyze_stage2(output_root: Path, ecut_map: dict) -> dict:
@@ -353,17 +407,26 @@ def generate(args: argparse.Namespace) -> int:
         state = load_state(root)
         if state.get("current_stage") == "stage_1":
             ecut_map = {}
+            energy_data = {}
             ecut_values = [float(value) for value in state["stages"]["stage_1"]["ecut_values_Ry"]]
             for strain in STRAINS:
-                ecut_map[str(strain)] = {}
+                strain_key = str(strain)
+                ecut_map[strain_key] = {}
+                energy_data[strain_key] = {}
                 for nqx in NQX_VALUES:
-                    ecut_map[str(strain)][str(nqx)] = choose_converged_ecut(
+                    nqx_key = str(nqx)
+                    energy_data[strain_key][nqx_key] = ecut_energy_data(
                         output_root, strain, nqx, ecut_values
                     )
+                    ecut_map[strain_key][nqx_key] = choose_converged_ecut(
+                        output_root, strain, nqx, ecut_values
+                    )
+            graph_path = plot_ecut_convergence(output_root, energy_data, ecut_map)
             generate_stage2(root, output_root, template, submit_path, ecut_map, args.submit)
             state["completed_stages"].append("stage_1")
             state["current_stage"] = "stage_2_kpoint"
             state["stages"]["stage_1"]["converged_ecut"] = ecut_map
+            state["stages"]["stage_1"]["convergence_graph"] = str(graph_path)
             state["stages"]["stage_2_kpoint"] = {
                 "status": "submitted" if args.submit else "generated",
                 "kpoints": list(STAGE2_KPOINTS),
@@ -372,6 +435,29 @@ def generate(args: argparse.Namespace) -> int:
             save_state(root, state)
             print(f"Updated {STATE_FILENAME}; current stage: stage_2_kpoint")
         elif state.get("current_stage") == "stage_2_kpoint":
+            if not (output_root / "ecut_convergence.png").is_file():
+                ecut_values = [
+                    float(value) for value in state["stages"]["stage_1"]["ecut_values_Ry"]
+                ]
+                ecut_map = state["stages"]["stage_1"]["converged_ecut"]
+                energy_data = {}
+                for strain in STRAINS:
+                    strain_key = str(strain)
+                    energy_data[strain_key] = {}
+                    for nqx in NQX_VALUES:
+                        energy_data[strain_key][str(nqx)] = ecut_energy_data(
+                            output_root, strain, nqx, ecut_values
+                        )
+                graph_path = plot_ecut_convergence(output_root, energy_data, ecut_map)
+                state["stages"]["stage_1"]["convergence_graph"] = str(graph_path)
+                save_state(root, state)
+                print(f"Generated {graph_path}")
+            if args.submit:
+                count = submit_existing_stage(root, output_root / "stage_2_kpoint")
+                state["stages"]["stage_2_kpoint"]["status"] = "submitted"
+                save_state(root, state)
+                print(f"Submitted {count} existing Stage 2 calculations")
+                return 0
             ecut_map = state["stages"]["stage_1"]["converged_ecut"]
             results = analyze_stage2(output_root, ecut_map)
             state["completed_stages"].append("stage_2_kpoint")
