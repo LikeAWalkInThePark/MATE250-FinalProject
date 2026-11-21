@@ -15,6 +15,7 @@ each generated calculation after inspecting the generated inputs.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import shutil
 import subprocess
@@ -23,9 +24,13 @@ from pathlib import Path
 
 # Cutoffs are intentionally easy to change.  The production value can be
 # selected after checking that the band gap is converged with respect to ecut.
-DEFAULT_ECUTS = (30.0, 35.0, 40.0, 45.0, 50.0, 60.0)
+DEFAULT_ECUTS = (30.0, 35.0, 40.0, 45.0, 50.0, 60.0, 70.0, 80.0)
 STRAINS = (0.0, 1.0, 2.0, -1.0, -2.0)
 NQX_VALUES = (3, 4)
+STAGE1_ENERGY_TOL_RY = 1.0e-5
+STAGE2_GAP_TOL_EV = 0.005
+STAGE2_KPOINTS = (6, 8, 10, 12, 14)
+STATE_FILENAME = ".orchestrate_state.json"
 
 
 def replace_assignment(text: str, name: str, value: str) -> str:
@@ -94,7 +99,28 @@ def replace_lattice(text: str, scale: float) -> str:
     return text[: marker.start(2)] + replacement + text[marker.end(2) :]
 
 
-def make_input(template: str, *, nqx: int, ecut: float, strain_percent: float) -> str:
+def replace_kpoints(text: str, kpoint: int) -> str:
+    """Replace an automatic cubic k-point grid while preserving offsets."""
+    pattern = r"(^\s*K_POINTS\s+automatic\s*\n\s*)\d+\s+\d+\s+\d+(\s+.*)$"
+    updated, count = re.subn(
+        pattern,
+        rf"\g<1>{kpoint} {kpoint} {kpoint}\g<2>",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+    if count != 1:
+        raise ValueError(f"Expected exactly one automatic K_POINTS grid; found {count}")
+    return updated
+
+
+def make_input(
+    template: str,
+    *,
+    nqx: int,
+    ecut: float,
+    strain_percent: float,
+    kpoint: int | None = None,
+) -> str:
     scale = 1.0 + strain_percent / 100.0
     text = template
     # Each run is four directory levels below MATE250-FinalProject:
@@ -103,6 +129,10 @@ def make_input(template: str, *, nqx: int, ecut: float, strain_percent: float) -
     text = replace_assignment(text, "ecutwfc", f"{ecut:g}")
     text = replace_assignment(text, "ecutrho", f"{4.0 * ecut:g}")
     text = replace_nqx(text, nqx)
+    if kpoint is not None:
+        text = replace_kpoints(text, kpoint)
+    # Keep fractional crystal coordinates unchanged.  Scaling the lattice
+    # vectors applies the homogeneous strain to the physical positions.
     return replace_lattice(text, scale)
 
 
@@ -130,6 +160,180 @@ def find_project_root(requested_root: Path) -> Path:
     return requested_root
 
 
+def state_path(root: Path) -> Path:
+    return root / STATE_FILENAME
+
+
+def save_state(root: Path, state: dict) -> None:
+    state_path(root).write_text(json.dumps(state, indent=2) + "\n")
+
+
+def load_state(root: Path) -> dict:
+    path = state_path(root)
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"No {STATE_FILENAME} found. Run Stage 1 first without --continue."
+        )
+    return json.loads(path.read_text())
+
+
+def output_files(run_dir: Path) -> list[Path]:
+    """Return likely Slurm/QE output files in one run directory."""
+    return sorted(
+        path for path in run_dir.rglob("*")
+        if path.is_file() and path.suffix.lower() in {".out", ".log"}
+    )
+
+
+def last_match(path: Path, patterns: tuple[str, ...]) -> float | None:
+    text = path.read_text(errors="replace")
+    values = []
+    for pattern in patterns:
+        for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+            values.append(float(match.group(1).replace("D", "E").replace("d", "e")))
+    return values[-1] if values else None
+
+
+def total_energy(run_dir: Path) -> float | None:
+    number = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[EeDd][-+]?\d+)?"
+    patterns = (rf"!\s*total energy\s*=\s*({number})\s+Ry",)
+    for path in reversed(output_files(run_dir)):
+        value = last_match(path, patterns)
+        if value is not None:
+            return value
+    return None
+
+
+def band_gap(run_dir: Path) -> float | None:
+    """Extract a QE-reported highest-occupied/lowest-unoccupied gap in eV."""
+    for path in reversed(output_files(run_dir)):
+        text = path.read_text(errors="replace")
+        paired = re.findall(
+            r"highest occupied\s*,\s*lowest unoccupied level\s*\(ev\)\s*:\s*"
+            r"([-+0-9.]+)\s+([-+0-9.]+)",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if paired:
+            occupied, unoccupied = paired[-1]
+            return float(unoccupied) - float(occupied)
+
+        occupied = re.findall(
+            r"highest occupied level\s*\(ev\)\s*:\s*([-+0-9.]+)",
+            text,
+            flags=re.IGNORECASE,
+        )
+        unoccupied = re.findall(
+            r"lowest unoccupied level\s*\(ev\)\s*:\s*([-+0-9.]+)",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if occupied and unoccupied:
+            return float(unoccupied[-1]) - float(occupied[-1])
+    return None
+
+
+def choose_converged_ecut(output_root: Path, strain: float, nqx: int, ecut_values: list[float]) -> float:
+    results = []
+    for ecut in sorted(ecut_values):
+        run_dir = output_root / stage_name(strain) / f"nqx_{nqx}" / f"ecut_{ecut:g}Ry"
+        energy = total_energy(run_dir)
+        if energy is None:
+            raise RuntimeError(f"Could not find a QE total energy in {run_dir}")
+        results.append((ecut, energy))
+
+    for (ecut, energy), (_, next_energy) in zip(results, results[1:]):
+        if abs(next_energy - energy) <= STAGE1_ENERGY_TOL_RY:
+            return ecut
+    raise RuntimeError(
+        f"No converged ecut found for {stage_name(strain)}, nqx={nqx}; "
+        f"increase the ecut sweep or adjust STAGE1_ENERGY_TOL_RY."
+    )
+
+
+def generate_stage1(root: Path, output_root: Path, template: str, submit_path: Path, ecut_values: list[float], submit: bool) -> None:
+    generated = []
+    for strain in STRAINS:
+        for nqx in NQX_VALUES:
+            for ecut in ecut_values:
+                run_dir = output_root / stage_name(strain) / f"nqx_{nqx}" / f"ecut_{ecut:g}Ry"
+                run_dir.mkdir(parents=True, exist_ok=True)
+                (run_dir / "si.scf.in").write_text(
+                    make_input(template, nqx=nqx, ecut=ecut, strain_percent=strain)
+                )
+                shutil.copy2(submit_path, run_dir / "submit.sh")
+                generated.append(run_dir)
+    print(f"Generated Stage 1: {len(generated)} calculations under {output_root}")
+    if submit:
+        for run_dir in generated:
+            print(f"Submitting {run_dir.relative_to(root)}")
+            subprocess.run(["sbatch", "submit.sh"], cwd=run_dir, check=True)
+
+
+def generate_stage2(root: Path, output_root: Path, template: str, submit_path: Path, ecut_map: dict, submit: bool) -> None:
+    generated = []
+    for strain in STRAINS:
+        strain_key = str(strain)
+        for nqx in NQX_VALUES:
+            ecut = float(ecut_map[strain_key][str(nqx)])
+            for kpoint in STAGE2_KPOINTS:
+                run_dir = (
+                    output_root / "stage_2_kpoint" / stage_name(strain)
+                    / f"nqx_{nqx}" / f"ecut_{ecut:g}Ry" / f"k_{kpoint}x{kpoint}x{kpoint}"
+                )
+                run_dir.mkdir(parents=True, exist_ok=True)
+                (run_dir / "si.scf.in").write_text(
+                    make_input(
+                        template,
+                        nqx=nqx,
+                        ecut=ecut,
+                        strain_percent=strain,
+                        kpoint=kpoint,
+                    )
+                )
+                shutil.copy2(submit_path, run_dir / "submit.sh")
+                generated.append(run_dir)
+    print(f"Generated Stage 2: {len(generated)} calculations under {output_root / 'stage_2_kpoint'}")
+    if submit:
+        for run_dir in generated:
+            print(f"Submitting {run_dir.relative_to(root)}")
+            subprocess.run(["sbatch", "submit.sh"], cwd=run_dir, check=True)
+
+
+def analyze_stage2(output_root: Path, ecut_map: dict) -> dict:
+    """Find the lowest converged k-point grid for every strain and nqx."""
+    k_map = {}
+    gaps = {}
+    for strain in STRAINS:
+        strain_key = str(strain)
+        k_map[strain_key] = {}
+        gaps[strain_key] = {}
+        for nqx in NQX_VALUES:
+            nqx_key = str(nqx)
+            ecut = float(ecut_map[strain_key][nqx_key])
+            values = []
+            for kpoint in STAGE2_KPOINTS:
+                run_dir = (
+                    output_root / "stage_2_kpoint" / stage_name(strain)
+                    / f"nqx_{nqx}" / f"ecut_{ecut:g}Ry" / f"k_{kpoint}x{kpoint}x{kpoint}"
+                )
+                gap = band_gap(run_dir)
+                if gap is None:
+                    raise RuntimeError(f"Could not find a QE band gap in {run_dir}")
+                values.append((kpoint, gap))
+            gaps[strain_key][nqx_key] = {str(k): value for k, value in values}
+            for (kpoint, gap), (_, next_gap) in zip(values, values[1:]):
+                if abs(next_gap - gap) <= STAGE2_GAP_TOL_EV:
+                    k_map[strain_key][nqx_key] = kpoint
+                    break
+            else:
+                raise RuntimeError(
+                    f"No converged k-point grid found for {stage_name(strain)}, nqx={nqx}; "
+                    f"increase STAGE2_KPOINTS or adjust STAGE2_GAP_TOL_EV."
+                )
+    return {"converged_kpoints": k_map, "band_gaps_eV": gaps}
+
+
 def generate(args: argparse.Namespace) -> int:
     root = find_project_root(Path(args.root))
     reference = root / "ReferenceFiles"
@@ -145,30 +349,57 @@ def generate(args: argparse.Namespace) -> int:
     template = template_path.read_text()
     output_root = root / args.output
     output_root.mkdir(parents=True, exist_ok=True)
-    generated = []
-
-    for strain in STRAINS:
-        stage_dir = output_root / stage_name(strain)
-        for nqx in NQX_VALUES:
-            nqx_dir = stage_dir / f"nqx_{nqx}"
-            for ecut in args.ecut:
-                run_dir = nqx_dir / f"ecut_{ecut:g}Ry"
-                run_dir.mkdir(parents=True, exist_ok=True)
-
-                (run_dir / "si.scf.in").write_text(
-                    make_input(template, nqx=nqx, ecut=ecut, strain_percent=strain)
-                )
-                shutil.copy2(submit_path, run_dir / "submit.sh")
-                generated.append(run_dir)
-
-    print(f"Generated {len(generated)} calculations under {output_root}")
-
-    if args.submit:
-        for run_dir in generated:
-            print(f"Submitting {run_dir.relative_to(root)}")
-            subprocess.run(["sbatch", "submit.sh"], cwd=run_dir, check=True)
+    if args.continue_stage:
+        state = load_state(root)
+        if state.get("current_stage") == "stage_1":
+            ecut_map = {}
+            ecut_values = [float(value) for value in state["stages"]["stage_1"]["ecut_values_Ry"]]
+            for strain in STRAINS:
+                ecut_map[str(strain)] = {}
+                for nqx in NQX_VALUES:
+                    ecut_map[str(strain)][str(nqx)] = choose_converged_ecut(
+                        output_root, strain, nqx, ecut_values
+                    )
+            generate_stage2(root, output_root, template, submit_path, ecut_map, args.submit)
+            state["completed_stages"].append("stage_1")
+            state["current_stage"] = "stage_2_kpoint"
+            state["stages"]["stage_1"]["converged_ecut"] = ecut_map
+            state["stages"]["stage_2_kpoint"] = {
+                "status": "submitted" if args.submit else "generated",
+                "kpoints": list(STAGE2_KPOINTS),
+                "gap_tolerance_eV": STAGE2_GAP_TOL_EV,
+            }
+            save_state(root, state)
+            print(f"Updated {STATE_FILENAME}; current stage: stage_2_kpoint")
+        elif state.get("current_stage") == "stage_2_kpoint":
+            ecut_map = state["stages"]["stage_1"]["converged_ecut"]
+            results = analyze_stage2(output_root, ecut_map)
+            state["completed_stages"].append("stage_2_kpoint")
+            state["current_stage"] = "stage_2_kpoint_complete"
+            state["stages"]["stage_2_kpoint"].update(results)
+            state["stages"]["stage_2_kpoint"]["status"] = "analyzed"
+            save_state(root, state)
+            print(f"Updated {STATE_FILENAME}; Stage 2 k-point convergence is complete")
+        else:
+            raise RuntimeError(f"State is already at {state.get('current_stage')}; nothing to continue.")
     else:
-        print("No jobs submitted. Re-run with --submit after reviewing the inputs.")
+        generate_stage1(root, output_root, template, submit_path, list(args.ecut), args.submit)
+        state = {
+            "current_stage": "stage_1",
+            "completed_stages": [],
+            "stages": {
+                "stage_1": {
+                    "status": "submitted" if args.submit else "generated",
+                    "ecut_values_Ry": list(args.ecut),
+                    "nqx_values": list(NQX_VALUES),
+                    "energy_tolerance_Ry": STAGE1_ENERGY_TOL_RY,
+                }
+            },
+        }
+        save_state(root, state)
+        print(f"Created {STATE_FILENAME}; current stage: stage_1")
+        if not args.submit:
+            print("After Stage 1 finishes, run: python3 orchestrate.py --continue")
     return 0
 
 
@@ -196,6 +427,12 @@ def parse_args() -> argparse.Namespace:
         "--submit",
         action="store_true",
         help="Submit every generated run with sbatch",
+    )
+    parser.add_argument(
+        "--continue",
+        dest="continue_stage",
+        action="store_true",
+        help="Analyze the current stage and generate or complete the next stage",
     )
     return parser.parse_args()
 

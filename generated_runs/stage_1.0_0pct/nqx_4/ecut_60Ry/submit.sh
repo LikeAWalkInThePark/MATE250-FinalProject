@@ -2,12 +2,12 @@
 #SBATCH --job-name=qe_%j          
 #SBATCH --output=qe-%j.out
 #SBATCH --error=qe-%j.err
-#SBATCH --nodes=4
+#SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
-#SBATCH --time=2-00:00:00
+#SBATCH --time=0-23:30:00
 #SBATCH --mem=400G
-#SBATCH --partition=nsfqs
+#SBATCH --partition=nsfq
 #SBATCH --nodelist=g[27,30]
 
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
@@ -21,5 +21,6 @@ export OMP_PROC_BIND=close
 module load nvidia/nvhpc/24.11 
 module load quantumespresso/7.5.0
 
-mpirun -n $SLURM_NTASKS pw.x -npool 2 -ndiag 2 < si.scf.in > si.scf.out
+mpirun -n $SLURM_NTASKS pw.x -npool 1 -ndiag 1 < si.scf.in > si.scf.out
+
 

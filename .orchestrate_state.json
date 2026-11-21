@@ -1,0 +1,24 @@
+{
+  "current_stage": "stage_1",
+  "completed_stages": [],
+  "stages": {
+    "stage_1": {
+      "status": "submitted",
+      "ecut_values_Ry": [
+        30.0,
+        35.0,
+        40.0,
+        45.0,
+        50.0,
+        60.0,
+        70.0,
+        80.0
+      ],
+      "nqx_values": [
+        3,
+        4
+      ],
+      "energy_tolerance_Ry": 1e-05
+    }
+  }
+}
