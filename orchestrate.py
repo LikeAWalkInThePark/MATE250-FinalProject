@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -28,7 +29,7 @@ DEFAULT_ECUTS = (30.0, 35.0, 40.0, 45.0, 50.0, 60.0, 70.0, 80.0)
 STRAINS = (0.0, 1.0, 2.0, -1.0, -2.0)
 NQX_VALUES = (3, 4)
 STAGE1_ENERGY_TOL_RY = 1.0e-4
-STAGE2_GAP_TOL_EV = 0.005
+STAGE2_ENERGY_TOL_RY = 1.0e-2
 STAGE2_KPOINTS = (6, 8, 10, 12, 14)
 STATE_FILENAME = ".orchestrate_state.json"
 
@@ -54,6 +55,23 @@ def replace_assignment(text: str, name: str, value: str) -> str:
     comma = "," if assignment_part.rstrip().endswith(",") else ""
     replacement = f"{match.group(1)} {value}{comma}{comment}"
     return text[:match.start()] + replacement + text[match.end():]
+
+
+def ensure_assignment(text: str, name: str, value: str, namelist: str = "SYSTEM") -> str:
+    """Replace an assignment or add it to a namelist when absent."""
+    pattern = re.compile(rf"^\s*{re.escape(name)}\s*=", re.IGNORECASE | re.MULTILINE)
+    if pattern.search(text):
+        return replace_assignment(text, name, value)
+
+    block = re.search(
+        rf"(&{re.escape(namelist)}\b.*?)(^/\s*$)",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE | re.DOTALL,
+    )
+    if not block:
+        raise ValueError(f"Could not find &{namelist} namelist")
+    insertion = f"  {name:<14} = {value},\n"
+    return text[:block.start(2)] + insertion + text[block.start(2):]
 
 
 def replace_nqx(text: str, nqx: int) -> str:
@@ -176,6 +194,89 @@ def load_state(root: Path) -> dict:
             f"No {STATE_FILENAME} found. Run Stage 1 first without --continue."
         )
     return json.loads(path.read_text())
+
+
+def recover_state(root: Path, output_root: Path) -> dict:
+    """Reconstruct orchestration state from existing generated directories."""
+    state = {
+        "current_stage": "stage_1",
+        "completed_stages": [],
+        "stages": {},
+    }
+    stage1_root = output_root / "stage_1.0_0pct"
+    ecut_values = set()
+    for nqx in NQX_VALUES:
+        nqx_root = stage1_root / f"nqx_{nqx}"
+        for path in nqx_root.glob("ecut_*Ry"):
+            match = re.fullmatch(r"ecut_([0-9]+(?:\.[0-9]+)?)Ry", path.name)
+            if match:
+                ecut_values.add(float(match.group(1)))
+
+    if not ecut_values:
+        raise RuntimeError(f"Could not recover Stage 1 cutoff directories under {stage1_root}")
+
+    ecut_values = sorted(ecut_values)
+    state["stages"]["stage_1"] = {
+        "status": "generated",
+        "ecut_values_Ry": ecut_values,
+        "nqx_values": list(NQX_VALUES),
+        "energy_tolerance_Ry": STAGE1_ENERGY_TOL_RY,
+    }
+
+    ecut_map = {}
+    stage1_complete = True
+    for strain in STRAINS:
+        strain_key = str(strain)
+        ecut_map[strain_key] = {}
+        for nqx in NQX_VALUES:
+            try:
+                ecut_map[strain_key][str(nqx)] = choose_converged_ecut(
+                    output_root, strain, nqx, ecut_values
+                )
+            except RuntimeError:
+                stage1_complete = False
+
+    if stage1_complete:
+        state["completed_stages"].append("stage_1")
+        state["stages"]["stage_1"]["converged_ecut"] = ecut_map
+        state["current_stage"] = "stage_2_kpoint"
+
+    stage2_root = output_root / "stage_2_kpoint"
+    if stage2_root.is_dir() and stage1_complete:
+        try:
+            results = analyze_stage2(output_root, ecut_map)
+            graph_path = plot_kpoint_convergence(output_root, results)
+            state["completed_stages"].append("stage_2_kpoint")
+            state["current_stage"] = "stage_2_kpoint_complete"
+            state["stages"]["stage_2_kpoint"] = {
+                "status": "analyzed",
+                "kpoints": list(STAGE2_KPOINTS),
+                "energy_tolerance_Ry": STAGE2_ENERGY_TOL_RY,
+                "convergence_graph": str(graph_path),
+                **results,
+            }
+        except RuntimeError:
+            state["current_stage"] = "stage_2_kpoint"
+            state["stages"]["stage_2_kpoint"] = {
+                "status": "generated",
+                "kpoints": list(STAGE2_KPOINTS),
+                "energy_tolerance_Ry": STAGE2_ENERGY_TOL_RY,
+            }
+
+    stage3_root = output_root / "stage_3_vcrelax"
+    if stage3_root.is_dir():
+        state["completed_stages"].append(state["current_stage"])
+        state["current_stage"] = "stage_3_vcrelax"
+        state["stages"]["stage_3_vcrelax"] = {
+            "status": "generated",
+            "nqx_values": list(NQX_VALUES),
+            "cell_dynamics": "none",
+        }
+
+    save_state(root, state)
+    print(f"Recovered {STATE_FILENAME} from {output_root}")
+    print(f"Recovered current stage: {state['current_stage']}")
+    return state
 
 
 def output_files(run_dir: Path) -> list[Path]:
@@ -323,6 +424,7 @@ def generate_stage2(root: Path, output_root: Path, template: str, submit_path: P
                     / f"nqx_{nqx}" / f"ecut_{ecut:g}Ry" / f"k_{kpoint}x{kpoint}x{kpoint}"
                 )
                 run_dir.mkdir(parents=True, exist_ok=True)
+                pseudo_dir = os.path.relpath(root / "ReferenceFiles", run_dir)
                 (run_dir / "si.scf.in").write_text(
                     make_input(
                         template,
@@ -330,7 +432,7 @@ def generate_stage2(root: Path, output_root: Path, template: str, submit_path: P
                         ecut=ecut,
                         strain_percent=strain,
                         kpoint=kpoint,
-                        pseudo_dir="'../../../../../../ReferenceFiles/'",
+                        pseudo_dir=f"'{pseudo_dir}/'",
                     )
                 )
                 shutil.copy2(submit_path, run_dir / "submit.sh")
@@ -342,26 +444,94 @@ def generate_stage2(root: Path, output_root: Path, template: str, submit_path: P
             subprocess.run(["sbatch", "submit.sh"], cwd=run_dir, check=True)
 
 
-def submit_existing_stage(root: Path, stage_root: Path) -> int:
+def make_vcrelax_input(
+    template: str,
+    *,
+    nqx: int,
+    ecut: float,
+    kpoint: int,
+    strain_percent: float,
+    pseudo_dir: str,
+) -> str:
+    """Prepare a fixed-strain HSE vc-relax input."""
+    text = replace_assignment(text=template, name="pseudo_dir", value=pseudo_dir)
+    text = replace_assignment(text, "ecutwfc", f"{ecut:g}")
+    text = replace_assignment(text, "ecutrho", f"{4.0 * ecut:g}")
+    text = ensure_assignment(text, "input_dft", "'HSE'")
+    text = ensure_assignment(text, "nqx1", str(nqx))
+    text = ensure_assignment(text, "nqx2", str(nqx))
+    text = ensure_assignment(text, "nqx3", str(nqx))
+    text = replace_assignment(text, "cell_dynamics", "'none'")
+    text = replace_kpoints(text, kpoint)
+    return replace_lattice(text, 1.0 + strain_percent / 100.0)
+
+
+def generate_stage3_vcrelax(
+    root: Path,
+    output_root: Path,
+    template: str,
+    submit_path: Path,
+    ecut_map: dict,
+    kpoint_map: dict,
+    submit: bool,
+) -> None:
+    generated = []
+    reference_dir = root / "ReferenceFiles"
+    for strain in STRAINS:
+        strain_key = str(strain)
+        for nqx in NQX_VALUES:
+            nqx_key = str(nqx)
+            ecut = float(ecut_map[strain_key][nqx_key])
+            kpoint = int(kpoint_map[strain_key][nqx_key])
+            run_dir = (
+                output_root / "stage_3_vcrelax" / stage_name(strain)
+                / f"nqx_{nqx}" / f"ecut_{ecut:g}Ry" / f"k_{kpoint}x{kpoint}x{kpoint}"
+            )
+            run_dir.mkdir(parents=True, exist_ok=True)
+            pseudo_dir = os.path.relpath(reference_dir, run_dir)
+            (run_dir / "si.opt.in").write_text(
+                make_vcrelax_input(
+                    template,
+                    nqx=nqx,
+                    ecut=ecut,
+                    kpoint=kpoint,
+                    strain_percent=strain,
+                    pseudo_dir=f"'{pseudo_dir}/'",
+                )
+            )
+            shutil.copy2(submit_path, run_dir / "submit_gpuqs.sh")
+            generated.append(run_dir)
+
+    print(f"Generated Stage 3: {len(generated)} vc-relax calculations under {output_root / 'stage_3_vcrelax'}")
+    if submit:
+        for run_dir in generated:
+            print(f"Submitting {run_dir.relative_to(root)}")
+            subprocess.run(["sbatch", "submit_gpuqs.sh"], cwd=run_dir, check=True)
+
+
+def submit_existing_stage(root: Path, stage_root: Path, submit_name: str = "submit.sh") -> int:
     """Submit already-generated calculation directories for the current stage."""
-    submit_files = sorted(stage_root.rglob("submit.sh"))
+    submit_files = sorted(stage_root.rglob(submit_name))
+    # Support Stage 3 directories generated by older script versions.
+    if not submit_files and submit_name == "submit_gpuqs.sh":
+        submit_files = sorted(stage_root.rglob("submit_gpuqs"))
     if not submit_files:
-        raise RuntimeError(f"No submit.sh files found under {stage_root}")
+        raise RuntimeError(f"No {submit_name} files found under {stage_root}")
     for submit_file in submit_files:
         run_dir = submit_file.parent
         print(f"Submitting {run_dir.relative_to(root)}")
-        subprocess.run(["sbatch", "submit.sh"], cwd=run_dir, check=True)
+        subprocess.run(["sbatch", submit_file.name], cwd=run_dir, check=True)
     return len(submit_files)
 
 
 def analyze_stage2(output_root: Path, ecut_map: dict) -> dict:
-    """Find the lowest converged k-point grid for every strain and nqx."""
+    """Find the lowest energy-converged k-point grid for every strain and nqx."""
     k_map = {}
-    gaps = {}
+    energies = {}
     for strain in STRAINS:
         strain_key = str(strain)
         k_map[strain_key] = {}
-        gaps[strain_key] = {}
+        energies[strain_key] = {}
         for nqx in NQX_VALUES:
             nqx_key = str(nqx)
             ecut = float(ecut_map[strain_key][nqx_key])
@@ -371,21 +541,56 @@ def analyze_stage2(output_root: Path, ecut_map: dict) -> dict:
                     output_root / "stage_2_kpoint" / stage_name(strain)
                     / f"nqx_{nqx}" / f"ecut_{ecut:g}Ry" / f"k_{kpoint}x{kpoint}x{kpoint}"
                 )
-                gap = band_gap(run_dir)
-                if gap is None:
-                    raise RuntimeError(f"Could not find a QE band gap in {run_dir}")
-                values.append((kpoint, gap))
-            gaps[strain_key][nqx_key] = {str(k): value for k, value in values}
-            for (kpoint, gap), (_, next_gap) in zip(values, values[1:]):
-                if abs(next_gap - gap) <= STAGE2_GAP_TOL_EV:
+                energy = total_energy(run_dir)
+                if energy is None:
+                    raise RuntimeError(f"Could not find a QE total energy in {run_dir}")
+                values.append((kpoint, energy))
+            energies[strain_key][nqx_key] = {str(k): value for k, value in values}
+            for (kpoint, energy), (_, next_energy) in zip(values, values[1:]):
+                if abs(next_energy - energy) <= STAGE2_ENERGY_TOL_RY:
                     k_map[strain_key][nqx_key] = kpoint
                     break
             else:
                 raise RuntimeError(
                     f"No converged k-point grid found for {stage_name(strain)}, nqx={nqx}; "
-                    f"increase STAGE2_KPOINTS or adjust STAGE2_GAP_TOL_EV."
+                    f"increase STAGE2_KPOINTS or adjust STAGE2_ENERGY_TOL_RY."
                 )
-    return {"converged_kpoints": k_map, "band_gaps_eV": gaps}
+    return {"converged_kpoints": k_map, "total_energies_Ry": energies}
+
+
+def plot_kpoint_convergence(output_root: Path, results: dict) -> Path:
+    """Plot Stage 2 total-energy convergence for every strain and nqx."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    figure, axes = plt.subplots(2, 3, figsize=(16, 9), constrained_layout=True)
+    axes = axes.ravel()
+    energies = results["total_energies_Ry"]
+    selected = results["converged_kpoints"]
+    for index, strain in enumerate(STRAINS):
+        axis = axes[index]
+        strain_key = str(strain)
+        for nqx in NQX_VALUES:
+            nqx_key = str(nqx)
+            values = energies[strain_key][nqx_key]
+            x_values = [int(k) for k in values]
+            y_values = [values[str(k)] for k in x_values]
+            axis.plot(x_values, y_values, marker="o", label=f"nqx={nqx}")
+            axis.axvline(selected[strain_key][nqx_key], linestyle="--", alpha=0.6)
+        title = "0% strain" if strain == 0 else f"{strain:+g}% strain"
+        axis.set_title(title)
+        axis.set_xlabel("k-point grid (N×N×N)")
+        axis.set_ylabel("Total energy (Ry)")
+        axis.set_xticks(list(STAGE2_KPOINTS))
+        axis.grid(True, alpha=0.3)
+        axis.legend()
+    axes[-1].axis("off")
+    figure.suptitle("Stage 2 k-point total-energy convergence", fontsize=15)
+    output_path = output_root / "kpoint_convergence.png"
+    figure.savefig(output_path, dpi=200)
+    plt.close(figure)
+    return output_path
 
 
 def generate(args: argparse.Namespace) -> int:
@@ -403,6 +608,10 @@ def generate(args: argparse.Namespace) -> int:
     template = template_path.read_text()
     output_root = root / args.output
     output_root.mkdir(parents=True, exist_ok=True)
+
+    if args.recover_state:
+        recover_state(root, output_root)
+        return 0
     if args.continue_stage:
         state = load_state(root)
         if state.get("current_stage") == "stage_1":
@@ -430,7 +639,7 @@ def generate(args: argparse.Namespace) -> int:
             state["stages"]["stage_2_kpoint"] = {
                 "status": "submitted" if args.submit else "generated",
                 "kpoints": list(STAGE2_KPOINTS),
-                "gap_tolerance_eV": STAGE2_GAP_TOL_EV,
+                "energy_tolerance_Ry": STAGE2_ENERGY_TOL_RY,
             }
             save_state(root, state)
             print(f"Updated {STATE_FILENAME}; current stage: stage_2_kpoint")
@@ -460,12 +669,48 @@ def generate(args: argparse.Namespace) -> int:
                 return 0
             ecut_map = state["stages"]["stage_1"]["converged_ecut"]
             results = analyze_stage2(output_root, ecut_map)
+            graph_path = plot_kpoint_convergence(output_root, results)
             state["completed_stages"].append("stage_2_kpoint")
             state["current_stage"] = "stage_2_kpoint_complete"
             state["stages"]["stage_2_kpoint"].update(results)
+            state["stages"]["stage_2_kpoint"]["convergence_graph"] = str(graph_path)
             state["stages"]["stage_2_kpoint"]["status"] = "analyzed"
             save_state(root, state)
+            print(f"Generated {graph_path}")
             print(f"Updated {STATE_FILENAME}; Stage 2 k-point convergence is complete")
+        elif state.get("current_stage") == "stage_2_kpoint_complete":
+            vcrelax_template_path = root / "ReferenceFiles" / "vcrelax" / "si.opt.in"
+            vcrelax_submit_path = root / "ReferenceFiles" / "vcrelax" / "submit_gpuqs.sh"
+            for path in (vcrelax_template_path, vcrelax_submit_path):
+                if not path.is_file():
+                    raise FileNotFoundError(f"Missing required vc-relax reference file: {path}")
+            ecut_map = state["stages"]["stage_1"]["converged_ecut"]
+            kpoint_map = state["stages"]["stage_2_kpoint"]["converged_kpoints"]
+            generate_stage3_vcrelax(
+                root,
+                output_root,
+                vcrelax_template_path.read_text(),
+                vcrelax_submit_path,
+                ecut_map,
+                kpoint_map,
+                args.submit,
+            )
+            state["completed_stages"].append("stage_2_kpoint_complete")
+            state["current_stage"] = "stage_3_vcrelax"
+            state["stages"]["stage_3_vcrelax"] = {
+                "status": "submitted" if args.submit else "generated",
+                "nqx_values": list(NQX_VALUES),
+                "cell_dynamics": "none",
+            }
+            save_state(root, state)
+            print(f"Updated {STATE_FILENAME}; current stage: stage_3_vcrelax")
+        elif state.get("current_stage") == "stage_3_vcrelax":
+            if not args.submit:
+                raise RuntimeError("Stage 3 inputs are already generated. Use --continue --submit to submit them.")
+            count = submit_existing_stage(root, output_root / "stage_3_vcrelax", "submit_gpuqs.sh")
+            state["stages"]["stage_3_vcrelax"]["status"] = "submitted"
+            save_state(root, state)
+            print(f"Submitted {count} existing Stage 3 calculations")
         else:
             raise RuntimeError(f"State is already at {state.get('current_stage')}; nothing to continue.")
     else:
@@ -519,6 +764,11 @@ def parse_args() -> argparse.Namespace:
         dest="continue_stage",
         action="store_true",
         help="Analyze the current stage and generate or complete the next stage",
+    )
+    parser.add_argument(
+        "--recover-state",
+        action="store_true",
+        help="Rebuild .orchestrate_state.json from existing generated calculation directories",
     )
     return parser.parse_args()
 

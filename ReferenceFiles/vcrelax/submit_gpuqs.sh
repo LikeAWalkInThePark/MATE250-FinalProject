@@ -5,11 +5,10 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
-#SBATCH --time=0-00:10:00
+#SBATCH --time=0-23:00:00
 #SBATCH --mem-per-cpu=1000
-#SBATCH --partition=gpuqs
-#SBATCH --nodelist=g2,g3
-##SBATCH --exclusive
+#SBATCH --partition=nsfq
+#SBATCH --nodelist=g[27,30]
 
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export OMP_PLACES=cores

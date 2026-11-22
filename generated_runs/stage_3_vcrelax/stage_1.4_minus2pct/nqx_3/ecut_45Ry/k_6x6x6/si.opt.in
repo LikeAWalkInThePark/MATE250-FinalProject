@@ -1,0 +1,54 @@
+&CONTROL
+  calculation    = 'vc-relax',
+  prefix         = 'si',
+  pseudo_dir     = '../../../../../../ReferenceFiles/',
+  outdir         = './Si_out/',
+  nstep          = 50,
+
+  etot_conv_thr  = 1.0d-4,
+  forc_conv_thr  = 1.0d-4,
+/
+
+&SYSTEM
+  ibrav          = 0,
+  nat            = 2,
+  ntyp           = 1,
+
+  ecutwfc        = 45,
+  ecutrho        = 180,
+  input_dft      = 'HSE',
+  nqx1           = 3,
+  nqx2           = 3,
+  nqx3           = 3,
+/
+
+&ELECTRONS
+  conv_thr       = 1.0d-8,
+/
+
+&IONS
+  ion_dynamics   = 'bfgs',
+/
+
+&CELL
+  cell_dynamics  = 'none',
+  cell_dofree    = 'all',
+  press          = 0.0,
+  press_conv_thr = 0.5,
+/
+
+ATOMIC_SPECIES
+  Si  28.086  Si_ONCV_PBE-1.2.upf
+
+CELL_PARAMETERS {angstrom}
+  0.000000000   2.667414162   2.667414162
+  2.667414162   0.000000000   2.667414162
+  2.667414162   2.667414162   0.000000000
+
+
+ATOMIC_POSITIONS {crystal}
+  Si  0.000000000   0.000000000   0.000000000
+  Si  0.250000000   0.250000000   0.250000000
+
+K_POINTS automatic
+  6 6 6  0 0 0
