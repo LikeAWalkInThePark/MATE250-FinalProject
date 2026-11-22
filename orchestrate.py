@@ -330,7 +330,7 @@ def generate_stage2(root: Path, output_root: Path, template: str, submit_path: P
                         ecut=ecut,
                         strain_percent=strain,
                         kpoint=kpoint,
-                        pseudo_dir="'../../../../../ReferenceFiles/'",
+                        pseudo_dir="'../../../../../../ReferenceFiles/'",
                     )
                 )
                 shutil.copy2(submit_path, run_dir / "submit.sh")

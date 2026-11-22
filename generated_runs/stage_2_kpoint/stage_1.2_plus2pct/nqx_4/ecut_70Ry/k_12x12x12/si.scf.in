@@ -1,7 +1,7 @@
 &CONTROL
   calculation = 'scf',
   prefix      = 'si',
-  pseudo_dir  = '../../../../../ReferenceFiles/',!modify me to have proper pesudo dir
+  pseudo_dir  = '../../../../../../ReferenceFiles/',!modify me to have proper pesudo dir
   outdir      = './Si_out/', !modify me to have proper  out dir
 /
 
