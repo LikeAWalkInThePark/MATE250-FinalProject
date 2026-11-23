@@ -13,7 +13,7 @@
   ibrav          = 0,
   nat            = 2,
   ntyp           = 1,
-
+  nbnd           = 20  ! Set this higher than the default Kohn-Sham states
   ecutwfc        = 70,
   ecutrho        = 280,
   input_dft      = 'HSE',
