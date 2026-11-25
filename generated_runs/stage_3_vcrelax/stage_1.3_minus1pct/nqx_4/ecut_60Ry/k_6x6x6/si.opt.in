@@ -13,7 +13,7 @@
   ibrav          = 0,
   nat            = 2,
   ntyp           = 1,
-
+  nbnd           = 20  ! Set this higher than the default Kohn-Sham states
   ecutwfc        = 60,
   ecutrho        = 240,
   input_dft      = 'HSE',
@@ -41,9 +41,9 @@ ATOMIC_SPECIES
   Si  28.086  Si_ONCV_PBE-1.2.upf
 
 CELL_PARAMETERS {angstrom}
-  0.000000000   2.694632674   2.694632674
-  2.694632674   0.000000000   2.694632674
-  2.694632674   2.694632674   0.000000000
+  0.000000000   2.707418932   2.707418932
+  2.707418932   0.000000000   2.707418932
+  2.707418932   2.707418932   0.000000000
 
 
 ATOMIC_POSITIONS {crystal}
