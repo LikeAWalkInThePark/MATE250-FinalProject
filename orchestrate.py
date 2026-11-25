@@ -15,6 +15,7 @@ each generated calculation after inspecting the generated inputs.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import re
@@ -29,7 +30,7 @@ DEFAULT_ECUTS = (30.0, 35.0, 40.0, 45.0, 50.0, 60.0, 70.0, 80.0)
 STRAINS = (0.0, 1.0, 2.0, -1.0, -2.0)
 NQX_VALUES = (3, 4)
 STAGE1_ENERGY_TOL_RY = 1.0e-4
-STAGE2_ENERGY_TOL_RY = 1.0e-2
+STAGE2_ENERGY_TOL_RY = 1.0e-4
 STAGE2_KPOINTS = (6, 8, 10, 12, 14)
 STATE_FILENAME = ".orchestrate_state.json"
 
@@ -344,6 +345,160 @@ def band_gap(run_dir: Path) -> float | None:
         if occupied and unoccupied:
             return float(unoccupied[-1]) - float(occupied[-1])
     return None
+
+
+def latest_output_file(run_dir: Path) -> Path | None:
+    """Return the newest likely QE/Slurm output file containing results."""
+    files = output_files(run_dir)
+    return files[-1] if files else None
+
+
+def write_csv(path: Path, rows: list[dict], fieldnames: list[str]) -> Path:
+    """Write rows with a stable column order."""
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+    return path
+
+
+def export_results(output_root: Path, state: dict) -> dict:
+    """Tabulate Stage 1, Stage 2, and Stage 3 results in CSV files.
+
+    Stage 3 is the final fixed-strain vc-relax calculation.  Its QE output is
+    used for both the relaxed total energy and the HSE band gap.  All Stage 3
+    runs must contain a total energy and a parseable band gap before export is
+    marked complete.
+    """
+    stage1 = state["stages"]["stage_1"]
+    ecut_values = [float(value) for value in stage1["ecut_values_Ry"]]
+    ecut_map = stage1.get("converged_ecut", {})
+    stage2 = state["stages"].get("stage_2_kpoint", {})
+    kpoint_map = stage2.get("converged_kpoints", {})
+
+    common_fields = [
+        "stage", "strain_percent", "nqx", "ecut_Ry", "kpoint_grid",
+        "total_energy_Ry", "band_gap_eV", "selected", "status", "output_file",
+    ]
+    all_rows: list[dict] = []
+    stage1_rows: list[dict] = []
+    stage2_rows: list[dict] = []
+    relax_rows: list[dict] = []
+    band_gap_rows: list[dict] = []
+
+    for strain in STRAINS:
+        strain_key = str(strain)
+        for nqx in NQX_VALUES:
+            nqx_key = str(nqx)
+            selected_ecut = float(ecut_map[strain_key][nqx_key])
+            for ecut in ecut_values:
+                run_dir = output_root / stage_name(strain) / f"nqx_{nqx}" / f"ecut_{ecut:g}Ry"
+                energy = total_energy(run_dir)
+                output_path = latest_output_file(run_dir)
+                row = {
+                    "stage": "stage_1_ecut",
+                    "strain_percent": strain,
+                    "nqx": nqx,
+                    "ecut_Ry": ecut,
+                    "kpoint_grid": "",
+                    "total_energy_Ry": "" if energy is None else energy,
+                    "band_gap_eV": "",
+                    "selected": "yes" if ecut == selected_ecut else "no",
+                    "status": "complete" if energy is not None else "missing",
+                    "output_file": "" if output_path is None else str(output_path),
+                }
+                stage1_rows.append(row)
+                all_rows.append(row)
+
+            selected_kpoint = int(kpoint_map[strain_key][nqx_key])
+            for kpoint in STAGE2_KPOINTS:
+                run_dir = (
+                    output_root / "stage_2_kpoint" / stage_name(strain)
+                    / f"nqx_{nqx}" / f"ecut_{selected_ecut:g}Ry"
+                    / f"k_{kpoint}x{kpoint}x{kpoint}"
+                )
+                energy = total_energy(run_dir)
+                output_path = latest_output_file(run_dir)
+                row = {
+                    "stage": "stage_2_kpoint",
+                    "strain_percent": strain,
+                    "nqx": nqx,
+                    "ecut_Ry": selected_ecut,
+                    "kpoint_grid": f"{kpoint}x{kpoint}x{kpoint}",
+                    "total_energy_Ry": "" if energy is None else energy,
+                    "band_gap_eV": "",
+                    "selected": "yes" if kpoint == selected_kpoint else "no",
+                    "status": "complete" if energy is not None else "missing",
+                    "output_file": "" if output_path is None else str(output_path),
+                }
+                stage2_rows.append(row)
+                all_rows.append(row)
+
+            run_dir = (
+                output_root / "stage_3_vcrelax" / stage_name(strain)
+                / f"nqx_{nqx}" / f"ecut_{selected_ecut:g}Ry"
+                / f"k_{selected_kpoint}x{selected_kpoint}x{selected_kpoint}"
+            )
+            energy = total_energy(run_dir)
+            gap = band_gap(run_dir)
+            output_path = latest_output_file(run_dir)
+            if energy is None or gap is None:
+                missing = []
+                if energy is None:
+                    missing.append("total energy")
+                if gap is None:
+                    missing.append("band gap")
+                raise RuntimeError(
+                    f"Could not find {', '.join(missing)} in completed vc-relax output: {run_dir}"
+                )
+
+            row = {
+                "stage": "stage_3_vcrelax",
+                "strain_percent": strain,
+                "nqx": nqx,
+                "ecut_Ry": selected_ecut,
+                "kpoint_grid": f"{selected_kpoint}x{selected_kpoint}x{selected_kpoint}",
+                "total_energy_Ry": energy,
+                "band_gap_eV": gap,
+                "selected": "yes",
+                "status": "complete",
+                "output_file": "" if output_path is None else str(output_path),
+            }
+            relax_rows.append(row)
+            band_gap_rows.append({
+                "strain_percent": strain,
+                "nqx": nqx,
+                "ecut_Ry": selected_ecut,
+                "kpoint_grid": f"{selected_kpoint}x{selected_kpoint}x{selected_kpoint}",
+                "band_gap_eV": gap,
+                "relaxed_total_energy_Ry": energy,
+                "output_file": "" if output_path is None else str(output_path),
+            })
+            all_rows.append(row)
+
+    results_dir = output_root / "results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+    write_csv(results_dir / "all_results.csv", all_rows, common_fields)
+    write_csv(results_dir / "stage1_ecut_results.csv", stage1_rows, common_fields)
+    write_csv(results_dir / "stage2_kpoint_results.csv", stage2_rows, common_fields)
+    write_csv(results_dir / "stage3_vcrelax_results.csv", relax_rows, common_fields)
+    write_csv(
+        results_dir / "band_gap_results.csv",
+        band_gap_rows,
+        [
+            "strain_percent", "nqx", "ecut_Ry", "kpoint_grid", "band_gap_eV",
+            "relaxed_total_energy_Ry", "output_file",
+        ],
+    )
+    return {
+        "results_directory": str(results_dir),
+        "all_results_csv": str(results_dir / "all_results.csv"),
+        "stage1_csv": str(results_dir / "stage1_ecut_results.csv"),
+        "stage2_csv": str(results_dir / "stage2_kpoint_results.csv"),
+        "stage3_csv": str(results_dir / "stage3_vcrelax_results.csv"),
+        "band_gap_csv": str(results_dir / "band_gap_results.csv"),
+        "band_gap_rows": band_gap_rows,
+    }
 
 
 def choose_converged_ecut(output_root: Path, strain: float, nqx: int, ecut_values: list[float]) -> float:
@@ -705,12 +860,34 @@ def generate(args: argparse.Namespace) -> int:
             save_state(root, state)
             print(f"Updated {STATE_FILENAME}; current stage: stage_3_vcrelax")
         elif state.get("current_stage") == "stage_3_vcrelax":
-            if not args.submit:
-                raise RuntimeError("Stage 3 inputs are already generated. Use --continue --submit to submit them.")
-            count = submit_existing_stage(root, output_root / "stage_3_vcrelax", "submit_gpuqs.sh")
-            state["stages"]["stage_3_vcrelax"]["status"] = "submitted"
+            if args.submit:
+                count = submit_existing_stage(root, output_root / "stage_3_vcrelax", "submit_gpuqs.sh")
+                state["stages"]["stage_3_vcrelax"]["status"] = "submitted"
+                save_state(root, state)
+                print(f"Submitted {count} existing Stage 3 calculations")
+            else:
+                results = export_results(output_root, state)
+                state["completed_stages"].append("stage_3_vcrelax")
+                state["current_stage"] = "stage_4_results"
+                state["stages"]["stage_3_vcrelax"].update({
+                    "status": "analyzed",
+                    "results": results,
+                })
+                state["stages"]["stage_4_results"] = {
+                    "status": "complete",
+                    **results,
+                }
+                save_state(root, state)
+                print(f"Exported CSV results under {results['results_directory']}")
+                print(f"Band gaps calculated for {len(results['band_gap_rows'])} relaxed cases")
+        elif state.get("current_stage") == "stage_4_results":
+            results = export_results(output_root, state)
+            state["stages"]["stage_4_results"].update({
+                "status": "complete",
+                **results,
+            })
             save_state(root, state)
-            print(f"Submitted {count} existing Stage 3 calculations")
+            print(f"Refreshed CSV results under {results['results_directory']}")
         else:
             raise RuntimeError(f"State is already at {state.get('current_stage')}; nothing to continue.")
     else:
@@ -775,3 +952,5 @@ def parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     raise SystemExit(generate(parse_args()))
+
+

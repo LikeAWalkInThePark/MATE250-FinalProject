@@ -1,0 +1,11 @@
+stage,strain_percent,nqx,ecut_Ry,kpoint_grid,total_energy_Ry,band_gap_eV,selected,status,output_file
+stage_3_vcrelax,0.0,3,45.0,6x6x6,-15.76768406,1.3865999999999996,yes,complete,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.0_0pct/nqx_3/ecut_45Ry/k_6x6x6/si.opt.out
+stage_3_vcrelax,0.0,4,70.0,6x6x6,-15.76733279,1.3369,yes,complete,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.0_0pct/nqx_4/ecut_70Ry/k_6x6x6/si.opt.out
+stage_3_vcrelax,1.0,3,45.0,6x6x6,-15.76627371,1.4367,yes,complete,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.1_plus1pct/nqx_3/ecut_45Ry/k_6x6x6/si.opt.out
+stage_3_vcrelax,1.0,4,70.0,6x6x6,-15.76607063,1.4348999999999998,yes,complete,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.1_plus1pct/nqx_4/ecut_70Ry/k_6x6x6/si.opt.out
+stage_3_vcrelax,2.0,3,45.0,6x6x6,-15.763443,1.4824000000000002,yes,complete,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.2_plus2pct/nqx_3/ecut_45Ry/k_6x6x6/si.opt.out
+stage_3_vcrelax,2.0,4,70.0,6x6x6,-15.76324018,1.4809999999999999,yes,complete,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.2_plus2pct/nqx_4/ecut_70Ry/k_6x6x6/si.opt.out
+stage_3_vcrelax,-1.0,3,45.0,6x6x6,-15.76753016,1.3320000000000007,yes,complete,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.3_minus1pct/nqx_3/ecut_45Ry/k_6x6x6/si.opt.out
+stage_3_vcrelax,-1.0,4,60.0,6x6x6,-15.76717146,1.33,yes,complete,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.3_minus1pct/nqx_4/ecut_60Ry/k_6x6x6/si.opt.out
+stage_3_vcrelax,-2.0,3,45.0,6x6x6,-15.76565263,1.2737999999999996,yes,complete,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.4_minus2pct/nqx_3/ecut_45Ry/k_6x6x6/si.opt.out
+stage_3_vcrelax,-2.0,4,60.0,6x6x6,-15.76529333,1.2714999999999996,yes,complete,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.4_minus2pct/nqx_4/ecut_60Ry/k_6x6x6/si.opt.out
