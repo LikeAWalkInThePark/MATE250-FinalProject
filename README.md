@@ -202,8 +202,8 @@ The scientific sequence is:
 3. Using the selected cutoff, converge the k-point grid for every strain.
 4. Relax the atomic structure at fixed imposed strain using the converged
    cutoff and k-point grid.
-5. Perform the final HSE band-gap calculation using the relaxed structure and
-   converged numerical parameters.
+5. Extract the final HSE band gap from each completed relaxation output and
+   tabulate the calculation results in CSV files.
 
 The `0%` reference strain is included in every convergence sweep. The `+1%`,
 `+2%`, `-1%`, and `-2%` cases are hydrostatic strains applied to all lattice
@@ -221,13 +221,38 @@ flowchart TD
     E --> F[Select converged k-point grid]
     F --> G[Fixed-strain vc-relax<br/>using selected ecut and k grid]
     G --> H[Obtain relaxed atomic positions<br/>for each strain]
-    H --> I[Final HSE band-gap calculation<br/>using relaxed structures]
-    I --> J[Compare band gap<br/>as a function of strain]
+    H --> I[Extract HSE band gap<br/>from each relax output]
+    I --> J[Write CSV tables<br/>for all stages and band gaps]
+    J --> K[Compare band gap<br/>as a function of strain]
 ```
 
 At the final step, extract the band gap consistently for every strain using the
 same band-count convention and the converged `ecut`, k-point grid, and HSE
 `nqx` settings selected in the earlier stages.
+
+## Stage 4: results and band gaps
+
+After all Stage 3 vc-relax jobs finish, run:
+
+```bash
+python3 orchestrate.py --continue
+```
+
+The script reads the final total energy and the highest-occupied/lowest-
+unoccupied levels from each relaxed HSE output. It then writes:
+
+```text
+generated_runs/results/all_results.csv
+generated_runs/results/stage1_ecut_results.csv
+generated_runs/results/stage2_kpoint_results.csv
+generated_runs/results/stage3_vcrelax_results.csv
+generated_runs/results/band_gap_results.csv
+```
+
+The most useful file for plotting strain engineering is
+`band_gap_results.csv`. It contains one row for each strain and `nqx` value,
+including the selected cutoff, selected k-point grid, relaxed total energy, and
+band gap in eV.
 
 ## Useful commands
 
