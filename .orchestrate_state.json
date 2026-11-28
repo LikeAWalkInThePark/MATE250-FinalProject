@@ -1,9 +1,15 @@
 {
-  "current_stage": "stage_1",
-  "completed_stages": [],
+  "current_stage": "stage_6_complete",
+  "completed_stages": [
+    "stage_1",
+    "stage_2_kpoint",
+    "stage_2_kpoint_complete",
+    "stage_3_vcrelax",
+    "stage_5_final_scf"
+  ],
   "stages": {
     "stage_1": {
-      "status": "submitted",
+      "status": "generated",
       "ecut_values_Ry": [
         30.0,
         35.0,
@@ -18,7 +24,452 @@
         3,
         4
       ],
-      "energy_tolerance_Ry": 1e-05
+      "energy_tolerance_Ry": 0.0001,
+      "converged_ecut": {
+        "0.0": {
+          "3": 45.0,
+          "4": 70.0
+        },
+        "1.0": {
+          "3": 45.0,
+          "4": 70.0
+        },
+        "2.0": {
+          "3": 45.0,
+          "4": 70.0
+        },
+        "-1.0": {
+          "3": 45.0,
+          "4": 60.0
+        },
+        "-2.0": {
+          "3": 45.0,
+          "4": 60.0
+        }
+      }
+    },
+    "stage_2_kpoint": {
+      "status": "analyzed",
+      "kpoints": [
+        6,
+        8,
+        10,
+        12,
+        14
+      ],
+      "energy_tolerance_Ry": 0.01,
+      "convergence_graph": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/kpoint_convergence.png",
+      "converged_kpoints": {
+        "0.0": {
+          "3": 6,
+          "4": 6
+        },
+        "1.0": {
+          "3": 6,
+          "4": 6
+        },
+        "2.0": {
+          "3": 6,
+          "4": 6
+        },
+        "-1.0": {
+          "3": 6,
+          "4": 6
+        },
+        "-2.0": {
+          "3": 6,
+          "4": 6
+        }
+      },
+      "total_energies_Ry": {
+        "0.0": {
+          "3": {
+            "6": -15.76768413,
+            "8": -15.77636736,
+            "10": -15.77656771,
+            "12": -15.76916275,
+            "14": -15.77660811
+          },
+          "4": {
+            "6": -15.76747939,
+            "8": -15.77051482,
+            "10": -15.77204429,
+            "12": -15.77071835,
+            "14": -15.7762194
+          }
+        },
+        "1.0": {
+          "3": {
+            "6": -15.76627378,
+            "8": -15.77467726,
+            "10": -15.77487462,
+            "12": -15.76771933,
+            "14": -15.77491431
+          },
+          "4": {
+            "6": -15.7660707,
+            "8": -15.76911854,
+            "10": -15.77062869,
+            "12": -15.76931899,
+            "14": -15.77452237
+          }
+        },
+        "2.0": {
+          "3": {
+            "6": -15.76344307,
+            "8": -15.77158651,
+            "10": -15.77178027,
+            "12": -15.76486342,
+            "14": -15.77182041
+          },
+          "4": {
+            "6": -15.76324025,
+            "8": -15.76630111,
+            "10": -15.76779278,
+            "12": -15.76650026,
+            "14": -15.7714251
+          }
+        },
+        "-1.0": {
+          "3": {
+            "6": -15.76753024,
+            "8": -15.77651138,
+            "10": -15.7767178,
+            "12": -15.76904844,
+            "14": -15.77675779
+          },
+          "4": {
+            "6": -15.76717154,
+            "8": -15.77015041,
+            "10": -15.77168351,
+            "12": -15.77035885,
+            "14": -15.77627878
+          }
+        },
+        "-2.0": {
+          "3": {
+            "6": -15.76565271,
+            "8": -15.77495712,
+            "10": -15.77517004,
+            "12": -15.76722412,
+            "14": -15.77521105
+          },
+          "4": {
+            "6": -15.76529341,
+            "8": -15.7682603,
+            "10": -15.76981359,
+            "12": -15.76847546,
+            "14": -15.77473273
+          }
+        }
+      }
+    },
+    "stage_3_vcrelax": {
+      "status": "analyzed",
+      "nqx_values": [
+        3,
+        4
+      ],
+      "cell_dynamics": "none",
+      "results": {
+        "results_directory": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/results",
+        "all_results_csv": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/results/all_results.csv",
+        "stage1_csv": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/results/stage1_ecut_results.csv",
+        "stage2_csv": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/results/stage2_kpoint_results.csv",
+        "stage3_csv": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/results/stage3_vcrelax_results.csv",
+        "band_gap_csv": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/results/band_gap_results.csv",
+        "band_gap_rows": [
+          {
+            "strain_percent": 0.0,
+            "nqx": 3,
+            "ecut_Ry": 45.0,
+            "kpoint_grid": "6x6x6",
+            "band_gap_eV": 1.3865999999999996,
+            "relaxed_total_energy_Ry": -15.76768406,
+            "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.0_0pct/nqx_3/ecut_45Ry/k_6x6x6/si.opt.out"
+          },
+          {
+            "strain_percent": 0.0,
+            "nqx": 4,
+            "ecut_Ry": 70.0,
+            "kpoint_grid": "6x6x6",
+            "band_gap_eV": 1.3369,
+            "relaxed_total_energy_Ry": -15.76733279,
+            "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.0_0pct/nqx_4/ecut_70Ry/k_6x6x6/si.opt.out"
+          },
+          {
+            "strain_percent": 1.0,
+            "nqx": 3,
+            "ecut_Ry": 45.0,
+            "kpoint_grid": "6x6x6",
+            "band_gap_eV": 1.4367,
+            "relaxed_total_energy_Ry": -15.76627371,
+            "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.1_plus1pct/nqx_3/ecut_45Ry/k_6x6x6/si.opt.out"
+          },
+          {
+            "strain_percent": 1.0,
+            "nqx": 4,
+            "ecut_Ry": 70.0,
+            "kpoint_grid": "6x6x6",
+            "band_gap_eV": 1.4348999999999998,
+            "relaxed_total_energy_Ry": -15.76607063,
+            "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.1_plus1pct/nqx_4/ecut_70Ry/k_6x6x6/si.opt.out"
+          },
+          {
+            "strain_percent": 2.0,
+            "nqx": 3,
+            "ecut_Ry": 45.0,
+            "kpoint_grid": "6x6x6",
+            "band_gap_eV": 1.4824000000000002,
+            "relaxed_total_energy_Ry": -15.763443,
+            "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.2_plus2pct/nqx_3/ecut_45Ry/k_6x6x6/si.opt.out"
+          },
+          {
+            "strain_percent": 2.0,
+            "nqx": 4,
+            "ecut_Ry": 70.0,
+            "kpoint_grid": "6x6x6",
+            "band_gap_eV": 1.4809999999999999,
+            "relaxed_total_energy_Ry": -15.76324018,
+            "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.2_plus2pct/nqx_4/ecut_70Ry/k_6x6x6/si.opt.out"
+          },
+          {
+            "strain_percent": -1.0,
+            "nqx": 3,
+            "ecut_Ry": 45.0,
+            "kpoint_grid": "6x6x6",
+            "band_gap_eV": 1.3320000000000007,
+            "relaxed_total_energy_Ry": -15.76753016,
+            "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.3_minus1pct/nqx_3/ecut_45Ry/k_6x6x6/si.opt.out"
+          },
+          {
+            "strain_percent": -1.0,
+            "nqx": 4,
+            "ecut_Ry": 60.0,
+            "kpoint_grid": "6x6x6",
+            "band_gap_eV": 1.33,
+            "relaxed_total_energy_Ry": -15.76717146,
+            "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.3_minus1pct/nqx_4/ecut_60Ry/k_6x6x6/si.opt.out"
+          },
+          {
+            "strain_percent": -2.0,
+            "nqx": 3,
+            "ecut_Ry": 45.0,
+            "kpoint_grid": "6x6x6",
+            "band_gap_eV": 1.2737999999999996,
+            "relaxed_total_energy_Ry": -15.76565263,
+            "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.4_minus2pct/nqx_3/ecut_45Ry/k_6x6x6/si.opt.out"
+          },
+          {
+            "strain_percent": -2.0,
+            "nqx": 4,
+            "ecut_Ry": 60.0,
+            "kpoint_grid": "6x6x6",
+            "band_gap_eV": 1.2714999999999996,
+            "relaxed_total_energy_Ry": -15.76529333,
+            "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.4_minus2pct/nqx_4/ecut_60Ry/k_6x6x6/si.opt.out"
+          }
+        ]
+      }
+    },
+    "stage_4_results": {
+      "status": "complete",
+      "results_directory": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/results",
+      "all_results_csv": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/results/all_results.csv",
+      "stage1_csv": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/results/stage1_ecut_results.csv",
+      "stage2_csv": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/results/stage2_kpoint_results.csv",
+      "stage3_csv": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/results/stage3_vcrelax_results.csv",
+      "band_gap_csv": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/results/band_gap_results.csv",
+      "band_gap_rows": [
+        {
+          "strain_percent": 0.0,
+          "nqx": 3,
+          "ecut_Ry": 45.0,
+          "kpoint_grid": "6x6x6",
+          "band_gap_eV": 1.3865999999999996,
+          "relaxed_total_energy_Ry": -15.76768406,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.0_0pct/nqx_3/ecut_45Ry/k_6x6x6/si.opt.out"
+        },
+        {
+          "strain_percent": 0.0,
+          "nqx": 4,
+          "ecut_Ry": 70.0,
+          "kpoint_grid": "6x6x6",
+          "band_gap_eV": 1.3369,
+          "relaxed_total_energy_Ry": -15.76733279,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.0_0pct/nqx_4/ecut_70Ry/k_6x6x6/si.opt.out"
+        },
+        {
+          "strain_percent": 1.0,
+          "nqx": 3,
+          "ecut_Ry": 45.0,
+          "kpoint_grid": "6x6x6",
+          "band_gap_eV": 1.4367,
+          "relaxed_total_energy_Ry": -15.76627371,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.1_plus1pct/nqx_3/ecut_45Ry/k_6x6x6/si.opt.out"
+        },
+        {
+          "strain_percent": 1.0,
+          "nqx": 4,
+          "ecut_Ry": 70.0,
+          "kpoint_grid": "6x6x6",
+          "band_gap_eV": 1.4348999999999998,
+          "relaxed_total_energy_Ry": -15.76607063,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.1_plus1pct/nqx_4/ecut_70Ry/k_6x6x6/si.opt.out"
+        },
+        {
+          "strain_percent": 2.0,
+          "nqx": 3,
+          "ecut_Ry": 45.0,
+          "kpoint_grid": "6x6x6",
+          "band_gap_eV": 1.4824000000000002,
+          "relaxed_total_energy_Ry": -15.763443,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.2_plus2pct/nqx_3/ecut_45Ry/k_6x6x6/si.opt.out"
+        },
+        {
+          "strain_percent": 2.0,
+          "nqx": 4,
+          "ecut_Ry": 70.0,
+          "kpoint_grid": "6x6x6",
+          "band_gap_eV": 1.4809999999999999,
+          "relaxed_total_energy_Ry": -15.76324018,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.2_plus2pct/nqx_4/ecut_70Ry/k_6x6x6/si.opt.out"
+        },
+        {
+          "strain_percent": -1.0,
+          "nqx": 3,
+          "ecut_Ry": 45.0,
+          "kpoint_grid": "6x6x6",
+          "band_gap_eV": 1.3320000000000007,
+          "relaxed_total_energy_Ry": -15.76753016,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.3_minus1pct/nqx_3/ecut_45Ry/k_6x6x6/si.opt.out"
+        },
+        {
+          "strain_percent": -1.0,
+          "nqx": 4,
+          "ecut_Ry": 60.0,
+          "kpoint_grid": "6x6x6",
+          "band_gap_eV": 1.33,
+          "relaxed_total_energy_Ry": -15.76717146,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.3_minus1pct/nqx_4/ecut_60Ry/k_6x6x6/si.opt.out"
+        },
+        {
+          "strain_percent": -2.0,
+          "nqx": 3,
+          "ecut_Ry": 45.0,
+          "kpoint_grid": "6x6x6",
+          "band_gap_eV": 1.2737999999999996,
+          "relaxed_total_energy_Ry": -15.76565263,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.4_minus2pct/nqx_3/ecut_45Ry/k_6x6x6/si.opt.out"
+        },
+        {
+          "strain_percent": -2.0,
+          "nqx": 4,
+          "ecut_Ry": 60.0,
+          "kpoint_grid": "6x6x6",
+          "band_gap_eV": 1.2714999999999996,
+          "relaxed_total_energy_Ry": -15.76529333,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_3_vcrelax/stage_1.4_minus2pct/nqx_4/ecut_60Ry/k_6x6x6/si.opt.out"
+        }
+      ]
+    },
+    "stage_5_final_scf": {
+      "status": "analyzed",
+      "source": "relaxed vc-relax structures",
+      "calculation": "scf",
+      "final_scf_csv": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/results/final_scf_results.csv",
+      "rows": [
+        {
+          "strain_percent": 0.0,
+          "nqx": 3,
+          "ecut_Ry": 45.0,
+          "kpoint_grid": "6x6x6",
+          "final_scf_energy_Ry": -15.76768413,
+          "band_gap_eV": 1.3866000000000005,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.0_0pct/nqx_3/ecut_45Ry/k_6x6x6/si.scf.out"
+        },
+        {
+          "strain_percent": 0.0,
+          "nqx": 4,
+          "ecut_Ry": 70.0,
+          "kpoint_grid": "6x6x6",
+          "final_scf_energy_Ry": -15.76747939,
+          "band_gap_eV": 1.3847000000000005,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.0_0pct/nqx_4/ecut_70Ry/k_6x6x6/si.scf.out"
+        },
+        {
+          "strain_percent": 1.0,
+          "nqx": 3,
+          "ecut_Ry": 45.0,
+          "kpoint_grid": "6x6x6",
+          "final_scf_energy_Ry": -15.76627378,
+          "band_gap_eV": 1.4367,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.1_plus1pct/nqx_3/ecut_45Ry/k_6x6x6/si.scf.out"
+        },
+        {
+          "strain_percent": 1.0,
+          "nqx": 4,
+          "ecut_Ry": 70.0,
+          "kpoint_grid": "6x6x6",
+          "final_scf_energy_Ry": -15.7660707,
+          "band_gap_eV": 1.4348,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.1_plus1pct/nqx_4/ecut_70Ry/k_6x6x6/si.scf.out"
+        },
+        {
+          "strain_percent": 2.0,
+          "nqx": 3,
+          "ecut_Ry": 45.0,
+          "kpoint_grid": "6x6x6",
+          "final_scf_energy_Ry": -15.76344307,
+          "band_gap_eV": 1.4823000000000004,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.2_plus2pct/nqx_3/ecut_45Ry/k_6x6x6/si.scf.out"
+        },
+        {
+          "strain_percent": 2.0,
+          "nqx": 4,
+          "ecut_Ry": 70.0,
+          "kpoint_grid": "6x6x6",
+          "final_scf_energy_Ry": -15.76324025,
+          "band_gap_eV": 1.4809999999999999,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.2_plus2pct/nqx_4/ecut_70Ry/k_6x6x6/si.scf.out"
+        },
+        {
+          "strain_percent": -1.0,
+          "nqx": 3,
+          "ecut_Ry": 45.0,
+          "kpoint_grid": "6x6x6",
+          "final_scf_energy_Ry": -15.76753024,
+          "band_gap_eV": 1.3319999999999999,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.3_minus1pct/nqx_3/ecut_45Ry/k_6x6x6/si.scf.out"
+        },
+        {
+          "strain_percent": -1.0,
+          "nqx": 4,
+          "ecut_Ry": 60.0,
+          "kpoint_grid": "6x6x6",
+          "final_scf_energy_Ry": -15.76717154,
+          "band_gap_eV": 1.33,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.3_minus1pct/nqx_4/ecut_60Ry/k_6x6x6/si.scf.out"
+        },
+        {
+          "strain_percent": -2.0,
+          "nqx": 3,
+          "ecut_Ry": 45.0,
+          "kpoint_grid": "6x6x6",
+          "final_scf_energy_Ry": -15.76565271,
+          "band_gap_eV": 1.2736999999999998,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.4_minus2pct/nqx_3/ecut_45Ry/k_6x6x6/si.scf.out"
+        },
+        {
+          "strain_percent": -2.0,
+          "nqx": 4,
+          "ecut_Ry": 60.0,
+          "kpoint_grid": "6x6x6",
+          "final_scf_energy_Ry": -15.76529341,
+          "band_gap_eV": 1.2714999999999996,
+          "output_file": "/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.4_minus2pct/nqx_4/ecut_60Ry/k_6x6x6/si.scf.out"
+        }
+      ]
     }
   }
 }

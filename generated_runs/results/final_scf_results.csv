@@ -1,0 +1,11 @@
+strain_percent,nqx,ecut_Ry,kpoint_grid,final_scf_energy_Ry,band_gap_eV,output_file
+0.0,3,45.0,6x6x6,-15.76768413,1.3866000000000005,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.0_0pct/nqx_3/ecut_45Ry/k_6x6x6/si.scf.out
+0.0,4,70.0,6x6x6,-15.76747939,1.3847000000000005,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.0_0pct/nqx_4/ecut_70Ry/k_6x6x6/si.scf.out
+1.0,3,45.0,6x6x6,-15.76627378,1.4367,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.1_plus1pct/nqx_3/ecut_45Ry/k_6x6x6/si.scf.out
+1.0,4,70.0,6x6x6,-15.7660707,1.4348,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.1_plus1pct/nqx_4/ecut_70Ry/k_6x6x6/si.scf.out
+2.0,3,45.0,6x6x6,-15.76344307,1.4823000000000004,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.2_plus2pct/nqx_3/ecut_45Ry/k_6x6x6/si.scf.out
+2.0,4,70.0,6x6x6,-15.76324025,1.4809999999999999,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.2_plus2pct/nqx_4/ecut_70Ry/k_6x6x6/si.scf.out
+-1.0,3,45.0,6x6x6,-15.76753024,1.3319999999999999,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.3_minus1pct/nqx_3/ecut_45Ry/k_6x6x6/si.scf.out
+-1.0,4,60.0,6x6x6,-15.76717154,1.33,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.3_minus1pct/nqx_4/ecut_60Ry/k_6x6x6/si.scf.out
+-2.0,3,45.0,6x6x6,-15.76565271,1.2736999999999998,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.4_minus2pct/nqx_3/ecut_45Ry/k_6x6x6/si.scf.out
+-2.0,4,60.0,6x6x6,-15.76529341,1.2714999999999996,/fs/atipa/home/019124326/MATE250/FinalProject/MATE250-FinalProject/generated_runs/stage_5_final_scf/stage_1.4_minus2pct/nqx_4/ecut_60Ry/k_6x6x6/si.scf.out

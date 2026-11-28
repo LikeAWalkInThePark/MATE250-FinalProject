@@ -17,7 +17,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import logging
 import os
 import re
 import shutil
@@ -34,8 +33,13 @@ STAGE1_ENERGY_TOL_RY = 1.0e-4
 STAGE2_ENERGY_TOL_RY = 1.0e-4
 STAGE2_KPOINTS = (6, 8, 10, 12, 14)
 STATE_FILENAME = ".orchestrate_state.json"
+VERBOSITY = 0
 
-LOGGER = logging.getLogger("orchestrate")
+
+def verbose(message: str, level: int = 1) -> None:
+    """Print diagnostic information when -v/--verbose is enabled."""
+    if VERBOSITY >= level:
+        print(f"[verbose] {message}")
 
 
 def replace_assignment(text: str, name: str, value: str) -> str:
@@ -189,6 +193,7 @@ def state_path(root: Path) -> Path:
 
 def save_state(root: Path, state: dict) -> None:
     state_path(root).write_text(json.dumps(state, indent=2) + "\n")
+    verbose(f"Saved state: {state_path(root)}; current stage={state.get('current_stage')}", 2)
 
 
 def load_state(root: Path) -> dict:
@@ -197,21 +202,19 @@ def load_state(root: Path) -> dict:
         raise FileNotFoundError(
             f"No {STATE_FILENAME} found. Run Stage 1 first without --continue."
         )
-    return json.loads(path.read_text())
+    state = json.loads(path.read_text())
+    verbose(f"Loaded state: {path}; current stage={state.get('current_stage')}", 1)
+    return state
 
 
 def recover_state(root: Path, output_root: Path) -> dict:
     """Reconstruct orchestration state from existing generated directories."""
-    LOGGER.info("Starting state recovery")
-    LOGGER.info("Project root: %s", root)
-    LOGGER.info("Output root: %s", output_root)
     state = {
         "current_stage": "stage_1",
         "completed_stages": [],
         "stages": {},
     }
     stage1_root = output_root / "stage_1.0_0pct"
-    LOGGER.info("Checking Stage 1 directories: %s", stage1_root)
     ecut_values = set()
     for nqx in NQX_VALUES:
         nqx_root = stage1_root / f"nqx_{nqx}"
@@ -221,11 +224,9 @@ def recover_state(root: Path, output_root: Path) -> dict:
                 ecut_values.add(float(match.group(1)))
 
     if not ecut_values:
-        LOGGER.error("No Stage 1 cutoff directories found under %s", stage1_root)
         raise RuntimeError(f"Could not recover Stage 1 cutoff directories under {stage1_root}")
 
     ecut_values = sorted(ecut_values)
-    LOGGER.info("Recovered Stage 1 cutoff values: %s", ecut_values)
     state["stages"]["stage_1"] = {
         "status": "generated",
         "ecut_values_Ry": ecut_values,
@@ -245,23 +246,15 @@ def recover_state(root: Path, output_root: Path) -> dict:
                 )
             except RuntimeError as error:
                 stage1_complete = False
-                LOGGER.warning(
-                    "Could not recover Stage 1 cutoff for strain=%s, nqx=%s: %s",
-                    strain, nqx, error,
-                )
+                verbose(f"Stage 1 recovery incomplete for strain={strain}, nqx={nqx}: {error}", 1)
 
     if stage1_complete:
-        LOGGER.info("Stage 1 is complete; converged cutoffs recovered for all strain/nqx cases")
         state["completed_stages"].append("stage_1")
         state["stages"]["stage_1"]["converged_ecut"] = ecut_map
         state["current_stage"] = "stage_2_kpoint"
-    else:
-        LOGGER.warning("Stage 1 is not complete; Stage 2 and later stages cannot be recovered")
 
     stage2_root = output_root / "stage_2_kpoint"
-    LOGGER.info("Checking Stage 2 directory: %s", stage2_root)
     if stage2_root.is_dir() and stage1_complete:
-        LOGGER.info("Analyzing Stage 2 total energies")
         try:
             results = analyze_stage2(output_root, ecut_map)
             graph_path = plot_kpoint_convergence(output_root, results)
@@ -274,144 +267,90 @@ def recover_state(root: Path, output_root: Path) -> dict:
                 "convergence_graph": str(graph_path),
                 **results,
             }
-            LOGGER.info("Stage 2 is complete; converged k-points recovered")
         except RuntimeError as error:
-            LOGGER.warning("Stage 2 was not analyzed successfully: %s", error)
+            verbose(f"Stage 2 recovery incomplete: {error}", 1)
             state["current_stage"] = "stage_2_kpoint"
             state["stages"]["stage_2_kpoint"] = {
                 "status": "generated",
                 "kpoints": list(STAGE2_KPOINTS),
                 "energy_tolerance_Ry": STAGE2_ENERGY_TOL_RY,
             }
-    elif not stage2_root.is_dir():
-        LOGGER.warning("Stage 2 directory does not exist: %s", stage2_root)
 
     stage3_root = output_root / "stage_3_vcrelax"
-    LOGGER.info("Checking Stage 3 directory: %s", stage3_root)
-    if stage3_root.is_dir() and stage1_complete:
-        # If Stage 2 output files are missing, recover the selected k-point
-        # directly from the Stage 3 directory names.  Stage 3 already stores
-        # the k-point used for each completed vc-relax calculation.
-        stage2_state = state["stages"].setdefault("stage_2_kpoint", {})
-        kpoint_map = stage2_state.get("converged_kpoints")
-        if kpoint_map is None:
-            recovered_kpoints = {}
-            kpoints_complete = True
-            for strain in STRAINS:
-                strain_key = str(strain)
-                recovered_kpoints[strain_key] = {}
-                for nqx in NQX_VALUES:
-                    nqx_key = str(nqx)
-                    ecut = float(ecut_map[strain_key][nqx_key])
-                    parent = (
-                        stage3_root / stage_name(strain) / f"nqx_{nqx}"
-                        / f"ecut_{ecut:g}Ry"
-                    )
-                    candidates = []
-                    if parent.is_dir():
-                        for child in parent.iterdir():
-                            match = re.fullmatch(
-                                r"k_(\d+)x(\d+)x(\d+)", child.name
-                            )
-                            if (
-                                child.is_dir()
-                                and match
-                                and match.group(1) == match.group(2)
-                                and match.group(1) == match.group(3)
-                            ):
-                                candidates.append(int(match.group(1)))
-                    if len(candidates) != 1:
-                        kpoints_complete = False
-                        LOGGER.warning(
-                            "Cannot recover Stage 3 k-point for strain=%s, nqx=%s: "
-                            "expected exactly one k_* directory under %s, found %s",
-                            strain, nqx, parent, candidates,
-                        )
-                    else:
-                        recovered_kpoints[strain_key][nqx_key] = candidates[0]
-
-            if kpoints_complete:
-                kpoint_map = recovered_kpoints
-                stage2_state["converged_kpoints"] = kpoint_map
-                stage2_state["recovery_source"] = "stage_3_vcrelax_directories"
-                LOGGER.info("Recovered Stage 2 k-points from Stage 3 directory names")
-
-        # Merely finding the Stage 3 directory is not enough: it may contain
-        # inputs that were generated but whose vc-relax jobs are still running.
-        # Verify every selected vc-relax run before advancing recovery.
+    if stage3_root.is_dir():
         state["stages"]["stage_3_vcrelax"] = {
             "status": "generated",
             "nqx_values": list(NQX_VALUES),
             "cell_dynamics": "none",
         }
-        state["current_stage"] = "stage_3_vcrelax"
-
-        if kpoint_map is not None:
-            LOGGER.info("Checking completed Stage 3 vc-relax outputs")
+        if state["current_stage"] == "stage_2_kpoint_complete":
             try:
                 results = export_results(output_root, state)
+                state["completed_stages"].append("stage_2_kpoint_complete")
+                state["completed_stages"].append("stage_3_vcrelax")
+                state["current_stage"] = "stage_4_results"
+                state["stages"]["stage_3_vcrelax"].update({
+                    "status": "analyzed",
+                    "results": results,
+                })
+                state["stages"]["stage_4_results"] = {
+                    "status": "complete",
+                    **results,
+                }
             except RuntimeError as error:
-                # Stage 3 may be complete even when some Stage 2 output files
-                # are unavailable, so verify Stage 3 independently below.
-                LOGGER.warning("Could not export the full Stage 3 result set: %s", error)
+                verbose(f"Stage 3 recovery incomplete: {error}", 1)
+                state["current_stage"] = "stage_3_vcrelax"
+        else:
+            state["current_stage"] = "stage_3_vcrelax"
+
+    stage5_root = output_root / "stage_5_final_scf"
+    if (
+        stage5_root.is_dir()
+        and "stage_2_kpoint" in state["stages"]
+        and "converged_ecut" in state["stages"].get("stage_1", {})
+        and "converged_kpoints" in state["stages"].get("stage_2_kpoint", {})
+    ):
+        if "stage_4_results" not in state["stages"]:
+            try:
+                results = export_results(output_root, state)
+                state["stages"]["stage_4_results"] = {
+                    "status": "complete",
+                    **results,
+                }
+            except RuntimeError:
                 results = None
-
-            stage3_complete = True
-            for strain in STRAINS:
-                strain_key = str(strain)
-                for nqx in NQX_VALUES:
-                    nqx_key = str(nqx)
-                    ecut = float(ecut_map[strain_key][nqx_key])
-                    kpoint = int(kpoint_map[strain_key][nqx_key])
-                    run_dir = stage3_run_dir(
-                        output_root, strain, nqx, ecut, kpoint
-                    )
-                    if total_energy(run_dir) is None or band_gap(run_dir) is None:
-                        stage3_complete = False
-                        LOGGER.warning(
-                            "Stage 3 output is incomplete or unparsable: %s", run_dir
-                        )
-                        break
-                if not stage3_complete:
-                    break
-
-        else:
-            stage3_complete = False
-            results = None
-
-        if stage3_complete:
-            LOGGER.info("Stage 3 vc-relax is complete")
-            state["completed_stages"].append("stage_3_vcrelax")
-            state["current_stage"] = "stage_4_results"
-            stage3_update = {"status": "analyzed"}
-            if results is not None:
-                stage3_update["results"] = results
-            else:
-                stage3_update["recovery_note"] = (
-                    "Recovered from completed vc-relax outputs; "
-                    "Stage 2 output export was incomplete."
-                )
-            state["stages"]["stage_3_vcrelax"].update(stage3_update)
-            state["stages"]["stage_4_results"] = {
-                "status": "complete" if results is not None else "recovered",
+        if "stage_4_results" in state["stages"]:
+            state["stages"]["stage_5_final_scf"] = {
+                "status": "generated",
+                "source": "relaxed vc-relax structures",
+                "calculation": "scf",
             }
-        else:
-            LOGGER.warning("Stage 3 was found but is not complete")
-    elif not stage3_root.is_dir():
-        LOGGER.warning("Stage 3 directory does not exist: %s", stage3_root)
+            try:
+                results = analyze_final_scf(output_root, state)
+                state["completed_stages"].append("stage_5_final_scf")
+                state["current_stage"] = "stage_6_complete"
+                state["stages"]["stage_5_final_scf"].update({
+                    "status": "analyzed",
+                    **results,
+                })
+            except RuntimeError as error:
+                verbose(f"Stage 5 recovery incomplete: {error}", 1)
+                state["current_stage"] = "stage_5_final_scf"
 
     save_state(root, state)
-    LOGGER.info("Recovered %s from %s", STATE_FILENAME, output_root)
-    LOGGER.info("Recovered current stage: %s", state["current_stage"])
+    print(f"Recovered {STATE_FILENAME} from {output_root}")
+    print(f"Recovered current stage: {state['current_stage']}")
     return state
 
 
 def output_files(run_dir: Path) -> list[Path]:
     """Return likely Slurm/QE output files in one run directory."""
-    return sorted(
+    files = sorted(
         path for path in run_dir.rglob("*")
         if path.is_file() and path.suffix.lower() in {".out", ".log"}
     )
+    verbose(f"Found {len(files)} output file(s) under {run_dir}", 3)
+    return files
 
 
 def last_match(path: Path, patterns: tuple[str, ...]) -> float | None:
@@ -429,6 +368,7 @@ def total_energy(run_dir: Path) -> float | None:
     for path in reversed(output_files(run_dir)):
         value = last_match(path, patterns)
         if value is not None:
+            verbose(f"Total energy in {path}: {value} Ry", 2)
             return value
     return None
 
@@ -456,7 +396,9 @@ def band_gap(run_dir: Path) -> float | None:
         )
         if paired:
             occupied, unoccupied = paired[-1]
-            return float(unoccupied) - float(occupied)
+            gap = float(unoccupied) - float(occupied)
+            verbose(f"Band gap in {path}: {gap} eV", 2)
+            return gap
 
         occupied = re.findall(
             r"highest occupied level\s*\(ev\)\s*:\s*([-+0-9.]+)",
@@ -469,7 +411,9 @@ def band_gap(run_dir: Path) -> float | None:
             flags=re.IGNORECASE,
         )
         if occupied and unoccupied:
-            return float(unoccupied[-1]) - float(occupied[-1])
+            gap = float(unoccupied[-1]) - float(occupied[-1])
+            verbose(f"Band gap in {path}: {gap} eV", 2)
+            return gap
     return None
 
 
@@ -1107,10 +1051,8 @@ def plot_kpoint_convergence(output_root: Path, results: dict) -> Path:
 
 
 def generate(args: argparse.Namespace) -> int:
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(levelname)s: %(message)s",
-    )
+    global VERBOSITY
+    VERBOSITY = args.verbose
     root = find_project_root(Path(args.root))
     reference = root / "ReferenceFiles"
     reference_hse = reference / "hse_cal"
@@ -1125,6 +1067,9 @@ def generate(args: argparse.Namespace) -> int:
     template = template_path.read_text()
     output_root = root / args.output
     output_root.mkdir(parents=True, exist_ok=True)
+    verbose(f"Project root: {root}")
+    verbose(f"Output root: {output_root}")
+    verbose(f"Requested action: {'continue' if args.continue_stage else 'generate'}; submit={args.submit}")
 
     if args.recover_state:
         recover_state(root, output_root)
@@ -1280,6 +1225,9 @@ def generate(args: argparse.Namespace) -> int:
                 save_state(root, state)
                 print(f"Final SCF analysis written to {results['final_scf_csv']}")
                 print(f"Final SCF band gaps calculated for {len(results['rows'])} cases")
+        elif state.get("current_stage") == "stage_6_complete":
+            final_csv = state["stages"].get("stage_5_final_scf", {}).get("final_scf_csv")
+            print(f"Final SCF stage is already complete: {final_csv}")
         else:
             raise RuntimeError(f"State is already at {state.get('current_stage')}; nothing to continue.")
     else:
@@ -1336,16 +1284,21 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--recover-state",
+        "--repair-state",
         action="store_true",
-        help="Rebuild .orchestrate_state.json from existing generated calculation directories",
+        help="Rebuild/repair .orchestrate_state.json from existing generated calculation directories",
     )
     parser.add_argument(
+        "-v",
         "--verbose",
-        action="store_true",
-        help="Show detailed diagnostic logging while generating or recovering stages",
+        action="count",
+        default=0,
+        help="Print diagnostic information; repeat for more detail (for example, -vv)",
     )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     raise SystemExit(generate(parse_args()))
+
+
